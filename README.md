@@ -2,7 +2,7 @@
 
 Interactive browser previews for Claude Code. Drag, select, and edit elements visually while AI builds.
 
-Visual MCP bridges Claude Code's terminal with a browser-based visual editor. Each domain (motion graphics, video, web design) gets its own adapter with specialized tools and UI behavior.
+Visual MCP bridges Claude Code's terminal with a browser-based visual editor. Each domain gets its own adapter with specialized tools and UI.
 
 ```
 Claude Code ←→ MCP (stdio) ←→ Visual Server ←→ Browser Preview
@@ -20,7 +20,7 @@ npm install
 
 ### As MCP Server (recommended)
 
-Add to your Claude Code MCP config (`~/.claude/mcp.json`):
+Add to `~/.claude/mcp.json`:
 
 ```json
 {
@@ -37,47 +37,73 @@ Add to your Claude Code MCP config (`~/.claude/mcp.json`):
 }
 ```
 
-Then in Claude Code, the tools are available automatically. Open `http://localhost:4200` in your browser.
+Open `http://localhost:4200` in your browser. Tools are available in Claude Code automatically.
 
-### Standalone
+## Adapters
 
-```bash
-node server.js
-# → Visual editor at http://localhost:4200
-# → MCP server on stdio
+### Motion Graphics (default)
+
+CSS/SVG-based animations with timeline, keyframes, and video export.
+
 ```
-
-## How It Works
-
-**From Claude Code:** Use MCP tools to add elements, set animations, control the timeline.
-
-**From the browser:** Click to select, drag to move, double-click text to edit inline. Type instructions in the input bar — they queue up for Claude to read via `get_user_input`.
-
-**Everything syncs in real-time** via WebSocket.
-
-## Core MCP Tools
-
-| Tool | What it does |
-|---|---|
-| `get_viewport` | Current scene state + user selection |
-| `get_user_selection` | What the user selected in the browser |
-| `get_user_input` | Messages the user typed in the browser |
-| `update_scene` | Push scene changes to the browser |
-| `send_command` | Send adapter-specific commands |
-
-## Motion Graphics Adapter
-
-The default adapter. CSS/SVG-based animations with a timeline.
+VISUAL_MCP_ADAPTER=motion
+```
 
 | Tool | What it does |
 |---|---|
 | `add_element` | Add text, shape, image, or SVG |
 | `update_element` | Change element properties |
-| `remove_element` | Delete an element |
+| `remove_element` | Delete element |
+| `duplicate_element` | Clone with offset |
+| `reorder_element` | Change layer order |
 | `add_keyframe` | Animate properties over time |
 | `set_timeline` | Play, pause, seek, reset |
 | `set_scene` | Background, dimensions, duration |
 | `list_elements` | Overview of all elements |
+| `export_video` | Render to MP4 via FFmpeg |
+
+### Web Editor
+
+Ember-style visual editing of any web page via iframe.
+
+```
+VISUAL_MCP_ADAPTER=web-editor
+```
+
+| Tool | What it does |
+|---|---|
+| `load_page` | Load URL into iframe |
+| `toggle_edit_mode` | Enable select/drag/edit overlay |
+| `modify_element` | Change text or style by selector |
+| `read_element` | Read element content and styles |
+| `inject_css` | Add custom CSS |
+| `inject_script` | Run JS in page context |
+| `navigate` | Go to different URL |
+| `get_changes` | List all user-made changes |
+
+## Core Tools (all adapters)
+
+| Tool | What it does |
+|---|---|
+| `get_viewport` | Current state + user selection |
+| `get_user_selection` | What's selected in browser |
+| `get_user_input` | Messages from browser input bar |
+| `update_scene` | Push state to browser |
+| `send_command` | Send adapter commands |
+| `take_screenshot` | Capture canvas as PNG |
+| `save_scene` / `load_scene` | Persist/restore state |
+
+## Browser Interaction
+
+- **Click** → Select (orange outline)
+- **Drag** → Move selected element
+- **Double-click** text → Edit inline
+- **Scroll wheel** → Zoom canvas
+- **Alt+drag** → Pan canvas
+- **Space** → Play/pause
+- **Arrow keys** → Nudge (Shift = 10px)
+- **Delete** → Remove selected
+- **F** → Fit canvas to view
 
 ## Writing Your Own Adapter
 
@@ -93,7 +119,7 @@ export function initialScene() {
 
 export function registerTools(server, bus, state) {
   server.tool('my_tool', 'Description', { /* zod schema */ }, async (args) => {
-    // Do something, update state.scene, emit via bus
+    bus.emit('mcp:scene-update', state.scene);
     return { content: [{ type: 'text', text: 'Done' }] };
   });
 }
@@ -104,15 +130,6 @@ export async function handleHttp(action, body, state) {
 ```
 
 Set `VISUAL_MCP_ADAPTER=my-adapter` to use it.
-
-## Browser Interaction
-
-- **Click** → Select element (orange outline)
-- **Drag** selected element → Move it
-- **Double-click** text → Edit inline
-- **Input bar** → Send instructions to Claude
-- **Timeline** → See keyframes, control playback
-- **Properties panel** → Edit values directly
 
 ## License
 
