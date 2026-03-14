@@ -1,0 +1,231 @@
+/**
+ * Motion Graphics Adapter
+ *
+ * Visual editor for CSS/SVG-based motion graphics.
+ * Elements on a canvas with keyframe animations, timeline control.
+ */
+
+import { z } from 'zod';
+
+export const name = 'motion';
+export const description = 'Motion Graphics Editor — CSS/SVG animations with timeline';
+
+export function initialScene() {
+  return {
+    width: 1920,
+    height: 1080,
+    duration: 5000, // ms
+    currentTime: 0,
+    playing: false,
+    background: '#0a0a0f',
+    elements: [],
+    // elements: [{ id, type, props, keyframes }]
+  };
+}
+
+let elementCounter = 0;
+
+export function registerTools(server, bus, state) {
+  server.tool(
+    'add_element',
+    'Add a visual element to the motion graphics canvas. Types: text, shape, image, svg.',
+    {
+      type: z.enum(['text', 'shape', 'image', 'svg']).describe('Element type'),
+      props: z.object({
+        x: z.number().default(100).describe('X position'),
+        y: z.number().default(100).describe('Y position'),
+        width: z.number().optional().describe('Width'),
+        height: z.number().optional().describe('Height'),
+        text: z.string().optional().describe('Text content (for text type)'),
+        fontSize: z.number().optional().describe('Font size in px'),
+        fontFamily: z.string().optional().describe('Font family'),
+        color: z.string().optional().describe('Text/fill color'),
+        backgroundColor: z.string().optional().describe('Background color'),
+        borderRadius: z.number().optional().describe('Border radius'),
+        opacity: z.number().optional().describe('Opacity 0-1'),
+        rotation: z.number().optional().describe('Rotation in degrees'),
+        shape: z.enum(['rect', 'circle', 'ellipse']).optional().describe('Shape type'),
+        src: z.string().optional().describe('Image URL (for image type)'),
+        svgContent: z.string().optional().describe('SVG markup (for svg type)'),
+        blur: z.number().optional().describe('Blur filter in px'),
+        shadow: z.string().optional().describe('Box shadow CSS'),
+        gradient: z.string().optional().describe('CSS gradient'),
+        zIndex: z.number().optional().describe('Z-index for layering'),
+      }).describe('Element properties'),
+    },
+    async ({ type, props }) => {
+      const id = `el-${++elementCounter}`;
+      const element = {
+        id,
+        type,
+        props: { ...props },
+        keyframes: [],
+      };
+
+      state.scene.elements = state.scene.elements || [];
+      state.scene.elements.push(element);
+      bus.emit('mcp:scene-update', state.scene);
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Element added: ${id} (${type})`,
+        }],
+      };
+    }
+  );
+
+  server.tool(
+    'update_element',
+    'Update properties of an existing element.',
+    {
+      id: z.string().describe('Element ID'),
+      props: z.record(z.any()).describe('Properties to update'),
+    },
+    async ({ id, props }) => {
+      const el = state.scene.elements?.find(e => e.id === id);
+      if (!el) {
+        return { content: [{ type: 'text', text: `Element ${id} not found.` }] };
+      }
+
+      el.props = { ...el.props, ...props };
+      bus.emit('mcp:scene-update', state.scene);
+
+      return {
+        content: [{ type: 'text', text: `Element ${id} updated.` }],
+      };
+    }
+  );
+
+  server.tool(
+    'remove_element',
+    'Remove an element from the canvas.',
+    {
+      id: z.string().describe('Element ID'),
+    },
+    async ({ id }) => {
+      const idx = state.scene.elements?.findIndex(e => e.id === id);
+      if (idx === -1 || idx === undefined) {
+        return { content: [{ type: 'text', text: `Element ${id} not found.` }] };
+      }
+
+      state.scene.elements.splice(idx, 1);
+      bus.emit('mcp:scene-update', state.scene);
+
+      return {
+        content: [{ type: 'text', text: `Element ${id} removed.` }],
+      };
+    }
+  );
+
+  server.tool(
+    'add_keyframe',
+    'Add a keyframe animation to an element. Keyframes define property changes at specific times.',
+    {
+      elementId: z.string().describe('Element ID'),
+      time: z.number().describe('Time in ms when this keyframe activates'),
+      props: z.record(z.any()).describe('Properties at this keyframe (x, y, opacity, rotation, scale, color, etc.)'),
+      easing: z.string().optional().describe('CSS easing function (default: ease)'),
+    },
+    async ({ elementId, time, props, easing }) => {
+      const el = state.scene.elements?.find(e => e.id === elementId);
+      if (!el) {
+        return { content: [{ type: 'text', text: `Element ${elementId} not found.` }] };
+      }
+
+      el.keyframes.push({ time, props, easing: easing || 'ease' });
+      el.keyframes.sort((a, b) => a.time - b.time);
+      bus.emit('mcp:scene-update', state.scene);
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Keyframe added to ${elementId} at ${time}ms. Total keyframes: ${el.keyframes.length}`,
+        }],
+      };
+    }
+  );
+
+  server.tool(
+    'set_timeline',
+    'Control the animation timeline — play, pause, seek.',
+    {
+      action: z.enum(['play', 'pause', 'seek', 'reset']).describe('Timeline action'),
+      time: z.number().optional().describe('Seek time in ms (for seek action)'),
+    },
+    async ({ action, time }) => {
+      switch (action) {
+        case 'play':
+          state.scene.playing = true;
+          break;
+        case 'pause':
+          state.scene.playing = false;
+          break;
+        case 'seek':
+          state.scene.currentTime = time || 0;
+          break;
+        case 'reset':
+          state.scene.currentTime = 0;
+          state.scene.playing = false;
+          break;
+      }
+      bus.emit('mcp:scene-update', state.scene);
+      bus.emit('mcp:command', { command: 'timeline', args: { action, time } });
+
+      return {
+        content: [{ type: 'text', text: `Timeline: ${action}${time !== undefined ? ` at ${time}ms` : ''}` }],
+      };
+    }
+  );
+
+  server.tool(
+    'set_scene',
+    'Set scene-level properties (background, dimensions, duration).',
+    {
+      width: z.number().optional(),
+      height: z.number().optional(),
+      duration: z.number().optional().describe('Total animation duration in ms'),
+      background: z.string().optional().describe('Background color or gradient'),
+    },
+    async (props) => {
+      const clean = Object.fromEntries(Object.entries(props).filter(([_, v]) => v !== undefined));
+      Object.assign(state.scene, clean);
+      bus.emit('mcp:scene-update', state.scene);
+
+      return {
+        content: [{ type: 'text', text: `Scene updated: ${Object.keys(clean).join(', ')}` }],
+      };
+    }
+  );
+
+  server.tool(
+    'list_elements',
+    'List all elements on the canvas with their properties.',
+    {},
+    async () => {
+      const elements = state.scene.elements || [];
+      if (elements.length === 0) {
+        return { content: [{ type: 'text', text: 'Canvas is empty.' }] };
+      }
+
+      const summary = elements.map(el => {
+        const kf = el.keyframes.length;
+        return `- ${el.id} (${el.type}) at (${el.props.x}, ${el.props.y})${el.props.text ? ` "${el.props.text}"` : ''}${kf > 0 ? ` [${kf} keyframes]` : ''}`;
+      }).join('\n');
+
+      return {
+        content: [{ type: 'text', text: summary }],
+      };
+    }
+  );
+}
+
+export async function handleHttp(action, body, state) {
+  switch (action) {
+    case 'export':
+      // Return the scene as exportable JSON
+      return { scene: state.scene };
+    default:
+      return { error: `Unknown action: ${action}` };
+  }
+}

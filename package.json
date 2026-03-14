@@ -1,0 +1,18 @@
+{
+  "name": "@promptheus/visual-mcp",
+  "version": "0.1.0",
+  "description": "Visual MCP Framework — interactive browser previews for Claude Code",
+  "type": "module",
+  "bin": {
+    "visual-mcp": "./bin/visual-mcp.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js --dev"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "express": "^5.1.0",
+    "ws": "^8.18.0"
+  }
+}

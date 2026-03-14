@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Visual MCP — Editor</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="editor">
+
+    <!-- Top Bar -->
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="logo">Visual MCP</span>
+        <span class="adapter-badge" id="adapter-badge">—</span>
+      </div>
+      <div class="topbar-center">
+        <div class="timeline-controls">
+          <button class="ctrl-btn" id="btn-reset" title="Reset">⏮</button>
+          <button class="ctrl-btn" id="btn-play" title="Play/Pause">▶</button>
+          <span class="time-display" id="time-display">0:00.0 / 5:00.0</span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <button class="ctrl-btn" id="btn-edit-mode" title="Edit Mode">✎</button>
+        <button class="ctrl-btn" id="btn-zoom-fit" title="Fit to View">⤢</button>
+        <span class="connection-dot" id="connection-dot"></span>
+      </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="main-layout">
+
+      <!-- Canvas Area -->
+      <div class="canvas-wrapper" id="canvas-wrapper">
+        <div class="canvas" id="canvas">
+          <!-- Elements are rendered here -->
+        </div>
+      </div>
+
+      <!-- Right Panel: Properties + Elements -->
+      <div class="panel" id="panel">
+        <div class="panel-section">
+          <div class="panel-header">Elements</div>
+          <div class="element-list" id="element-list">
+            <div class="empty-state">No elements yet</div>
+          </div>
+        </div>
+        <div class="panel-section" id="props-section" style="display: none;">
+          <div class="panel-header">Properties</div>
+          <div class="props-grid" id="props-grid"></div>
+        </div>
+        <div class="panel-section">
+          <div class="panel-header">Selection Info</div>
+          <div class="selection-info" id="selection-info">Click an element to select it</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="timeline" id="timeline">
+      <div class="timeline-ruler" id="timeline-ruler"></div>
+      <div class="timeline-tracks" id="timeline-tracks">
+        <div class="empty-state">Add elements to see their timeline tracks</div>
+      </div>
+      <div class="timeline-playhead" id="timeline-playhead"></div>
+    </div>
+
+    <!-- Input Bar (for sending messages to Claude) -->
+    <div class="input-bar">
+      <input type="text" id="user-input" placeholder="Describe what you want to change..." autocomplete="off">
+      <button class="send-btn" id="btn-send">Send</button>
+    </div>
+
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
