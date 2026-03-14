@@ -65,6 +65,20 @@ public/
 | `set_timeline` | Play, Pause, Seek, Reset |
 | `set_scene` | Scene-Einstellungen (Background, Dimensions, Duration) |
 | `list_elements` | Alle Elemente auflisten |
+| `export_video` | Animation als MP4 exportieren (via FFmpeg) |
+
+## Web-Editor Adapter Tools
+
+| Tool | Beschreibung |
+|---|---|
+| `load_page` | URL in iframe laden |
+| `toggle_edit_mode` | Ember-style Edit-Overlay an/aus |
+| `modify_element` | Text oder Style per Selector aendern |
+| `read_element` | Element-Inhalt und Styles lesen |
+| `inject_css` | Custom CSS einschleusen |
+| `inject_script` | JavaScript im Page-Kontext ausfuehren |
+| `navigate` | Zu anderer URL navigieren |
+| `get_changes` | Alle User-Aenderungen auflisten |
 
 ## Starten
 
