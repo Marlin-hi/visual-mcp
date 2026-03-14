@@ -199,6 +199,70 @@ export function registerTools(server, bus, state) {
   );
 
   server.tool(
+    'duplicate_element',
+    'Duplicate an existing element with an optional position offset.',
+    {
+      id: z.string().describe('Element ID to duplicate'),
+      offsetX: z.number().optional().describe('X offset from original (default: 20)'),
+      offsetY: z.number().optional().describe('Y offset from original (default: 20)'),
+    },
+    async ({ id, offsetX, offsetY }) => {
+      const el = state.scene.elements?.find(e => e.id === id);
+      if (!el) {
+        return { content: [{ type: 'text', text: `Element ${id} not found.` }] };
+      }
+
+      const newId = `el-${++elementCounter}`;
+      const clone = {
+        id: newId,
+        type: el.type,
+        props: {
+          ...JSON.parse(JSON.stringify(el.props)),
+          x: (el.props.x || 0) + (offsetX ?? 20),
+          y: (el.props.y || 0) + (offsetY ?? 20),
+        },
+        keyframes: JSON.parse(JSON.stringify(el.keyframes || [])),
+      };
+
+      state.scene.elements.push(clone);
+      bus.emit('mcp:scene-update', state.scene);
+
+      return {
+        content: [{ type: 'text', text: `Duplicated ${id} → ${newId}` }],
+      };
+    }
+  );
+
+  server.tool(
+    'reorder_element',
+    'Move an element up or down in the layer order (z-index).',
+    {
+      id: z.string().describe('Element ID'),
+      direction: z.enum(['up', 'down', 'top', 'bottom']).describe('Direction to move'),
+    },
+    async ({ id, direction }) => {
+      const elements = state.scene.elements || [];
+      const idx = elements.findIndex(e => e.id === id);
+      if (idx === -1) {
+        return { content: [{ type: 'text', text: `Element ${id} not found.` }] };
+      }
+
+      const [el] = elements.splice(idx, 1);
+      switch (direction) {
+        case 'up': elements.splice(Math.min(idx + 1, elements.length), 0, el); break;
+        case 'down': elements.splice(Math.max(idx - 1, 0), 0, el); break;
+        case 'top': elements.push(el); break;
+        case 'bottom': elements.unshift(el); break;
+      }
+
+      bus.emit('mcp:scene-update', state.scene);
+      return {
+        content: [{ type: 'text', text: `Element ${id} moved ${direction}.` }],
+      };
+    }
+  );
+
+  server.tool(
     'list_elements',
     'List all elements on the canvas with their properties.',
     {},

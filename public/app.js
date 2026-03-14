@@ -745,6 +745,76 @@ document.addEventListener('mouseup', () => {
   }
 });
 
+// --- Keyboard Shortcuts ---
+document.addEventListener('keydown', (e) => {
+  // Skip if typing in input field
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.contentEditable === 'true') return;
+
+  switch (e.key) {
+    case 'Delete':
+    case 'Backspace':
+      if (selectedId) {
+        const idx = scene.elements.findIndex(el => el.id === selectedId);
+        if (idx !== -1) {
+          scene.elements.splice(idx, 1);
+          sendWs({ type: 'input', data: { message: `[delete] ${selectedId}` } });
+          selectedId = null;
+          renderAll();
+        }
+      }
+      break;
+
+    case 'Escape':
+      selectedId = null;
+      canvas.querySelectorAll('.canvas-element').forEach(el => el.classList.remove('selected'));
+      propsSection.style.display = 'none';
+      selectionInfo.textContent = 'Click an element to select it';
+      break;
+
+    case ' ':
+      e.preventDefault();
+      if (scene.playing) stopAnimation();
+      else startAnimation();
+      break;
+
+    case 'ArrowUp':
+    case 'ArrowDown':
+    case 'ArrowLeft':
+    case 'ArrowRight':
+      if (selectedId) {
+        e.preventDefault();
+        const el = scene.elements.find(el => el.id === selectedId);
+        if (el) {
+          const step = e.shiftKey ? 10 : 1;
+          if (e.key === 'ArrowUp') el.props.y -= step;
+          if (e.key === 'ArrowDown') el.props.y += step;
+          if (e.key === 'ArrowLeft') el.props.x -= step;
+          if (e.key === 'ArrowRight') el.props.x += step;
+          sendWs({ type: 'move', data: { id: el.id, x: el.props.x, y: el.props.y } });
+          renderCanvas();
+          updateSelectionInfo();
+        }
+      }
+      break;
+
+    case 'f':
+      if (!e.ctrlKey && !e.metaKey) fitCanvas();
+      break;
+  }
+});
+
+// --- Timeline Click to Seek ---
+timelineRuler.addEventListener('click', (e) => {
+  const rect = timelineRuler.getBoundingClientRect();
+  const x = e.clientX - rect.left - 80; // 80px label offset
+  const width = rect.width - 80;
+  if (x < 0 || width <= 0) return;
+
+  const ratio = Math.max(0, Math.min(1, x / width));
+  const time = ratio * (scene.duration || 5000);
+  seekTo(time);
+});
+
 // --- User Input ---
 function sendUserInput() {
   const msg = userInput.value.trim();
