@@ -115,7 +115,38 @@ function handleCommand(cmd) {
     case 'read-element':
       readIframeElement(cmd.args);
       break;
+
+    // Blender commands
+    case 'show-viewport':
+      showBlenderViewport(cmd.args.src);
+      break;
+    case 'refresh-viewport':
+      // Trigger via user input so Claude knows to use Blender MCP
+      sendWs({ type: 'input', data: { message: '[viewport-refresh-requested]' } });
+      break;
   }
+}
+
+// --- Blender Viewport Mode ---
+function showBlenderViewport(src) {
+  const wrapper = document.getElementById('canvas-wrapper');
+
+  // Replace canvas content with viewport image
+  let img = wrapper.querySelector('.viewport-img');
+  if (!img) {
+    wrapper.innerHTML = '';
+    canvas.style.display = 'none';
+    img = document.createElement('img');
+    img.className = 'viewport-img';
+    img.style.cssText = 'max-width: 100%; max-height: 100%; object-fit: contain; cursor: crosshair;';
+    wrapper.appendChild(img);
+
+    // Hide timeline
+    document.getElementById('timeline').style.display = 'none';
+    document.querySelector('.timeline-controls').style.display = 'none';
+  }
+
+  img.src = src;
 }
 
 // --- Web Editor Mode ---
