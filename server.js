@@ -95,6 +95,112 @@ app.post('/api/scene', (req, res) => {
   res.json({ ok: true });
 });
 
+// API: Render-only view (for screenshots — no UI chrome, just canvas)
+app.get('/render', (req, res) => {
+  const time = parseInt(req.query.t || '0', 10);
+  res.send(`<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; }
+.canvas { position: relative; width: ${state.scene.width || 1920}px; height: ${state.scene.height || 1080}px; background: ${state.scene.background || '#0a0a0f'}; }
+.el { position: absolute; }
+</style>
+</head><body>
+<div class="canvas" id="canvas"></div>
+<script>
+const scene = ${JSON.stringify(state.scene)};
+const renderTime = ${time};
+const canvas = document.getElementById('canvas');
+
+function easeProgress(t, easing) {
+  switch (easing) {
+    case 'linear': return t;
+    case 'ease-in': return t * t;
+    case 'ease-out': return t * (2 - t);
+    default: return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+  }
+}
+
+for (const el of (scene.elements || [])) {
+  const div = document.createElement('div');
+  div.className = 'el';
+  const p = el.props || {};
+  div.style.left = (p.x||0)+'px';
+  div.style.top = (p.y||0)+'px';
+  if (p.width) div.style.width = p.width+'px';
+  if (p.height) div.style.height = p.height+'px';
+  if (p.opacity !== undefined) div.style.opacity = p.opacity;
+  if (p.rotation) div.style.transform = 'rotate('+p.rotation+'deg)';
+  if (p.zIndex) div.style.zIndex = p.zIndex;
+
+  if (el.type === 'text') {
+    div.textContent = p.text || '';
+    div.style.fontSize = (p.fontSize||48)+'px';
+    div.style.fontFamily = p.fontFamily || 'Inter, system-ui';
+    div.style.color = p.color || '#fff';
+    div.style.whiteSpace = 'pre-wrap';
+    if (p.backgroundColor) div.style.backgroundColor = p.backgroundColor;
+  } else if (el.type === 'shape') {
+    div.style.backgroundColor = p.color || '#f97316';
+    if (p.gradient) div.style.background = p.gradient;
+    if (p.shape==='circle'||p.shape==='ellipse') div.style.borderRadius='50%';
+    else div.style.borderRadius = (p.borderRadius||0)+'px';
+    if (!p.width) div.style.width='100px';
+    if (!p.height) div.style.height='100px';
+  } else if (el.type === 'svg' && p.svgContent) {
+    div.innerHTML = p.svgContent;
+  }
+  if (p.blur) div.style.filter = 'blur('+p.blur+'px)';
+  if (p.shadow) div.style.boxShadow = p.shadow;
+
+  // Apply keyframes at renderTime
+  const kfs = el.keyframes || [];
+  if (kfs.length > 0) {
+    let before = null, after = null;
+    for (const kf of kfs) {
+      if (kf.time <= renderTime) before = kf;
+      if (kf.time > renderTime && !after) after = kf;
+    }
+    const apply = (props) => {
+      if (props.x !== undefined) div.style.left = props.x+'px';
+      if (props.y !== undefined) div.style.top = props.y+'px';
+      if (props.opacity !== undefined) div.style.opacity = props.opacity;
+      if (props.rotation !== undefined) div.style.transform = 'rotate('+props.rotation+'deg)';
+      if (props.fontSize !== undefined) div.style.fontSize = props.fontSize+'px';
+      if (props.width !== undefined) div.style.width = props.width+'px';
+      if (props.height !== undefined) div.style.height = props.height+'px';
+      if (props.color !== undefined) {
+        if (el.type==='text') div.style.color = props.color;
+        else div.style.backgroundColor = props.color;
+      }
+      if (props.blur !== undefined) div.style.filter = 'blur('+props.blur+'px)';
+    };
+    if (before && !after) apply(before.props);
+    else if (before && after) {
+      const progress = (renderTime - before.time) / (after.time - before.time);
+      const eased = easeProgress(progress, after.easing || 'ease');
+      const interp = {};
+      for (const k of Object.keys(after.props)) {
+        const from = before.props[k] ?? p[k];
+        const to = after.props[k];
+        if (typeof from === 'number' && typeof to === 'number')
+          interp[k] = from + (to - from) * eased;
+        else interp[k] = progress < 0.5 ? from : to;
+      }
+      apply(interp);
+    }
+  }
+
+  canvas.appendChild(div);
+}
+</script>
+</body></html>`);
+});
+
 // API: Adapter-specific endpoints
 app.all('/api/adapter/:action', async (req, res) => {
   if (!state.adapter) {
