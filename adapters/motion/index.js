@@ -25,6 +25,16 @@ export function initialScene() {
 
 let elementCounter = 0;
 
+function getNextId(state) {
+  // Derive counter from existing elements to avoid collisions after restart
+  const existing = (state.scene.elements || []).map(e => {
+    const m = e.id.match(/^el-(\d+)$/);
+    return m ? parseInt(m[1], 10) : 0;
+  });
+  elementCounter = Math.max(elementCounter, ...existing, 0) + 1;
+  return `el-${elementCounter}`;
+}
+
 export function registerTools(server, bus, state) {
   server.tool(
     'add_element',
@@ -54,7 +64,7 @@ export function registerTools(server, bus, state) {
       }).describe('Element properties'),
     },
     async ({ type, props }) => {
-      const id = `el-${++elementCounter}`;
+      const id = getNextId(state);
       const element = {
         id,
         type,
@@ -212,7 +222,7 @@ export function registerTools(server, bus, state) {
         return { content: [{ type: 'text', text: `Element ${id} not found.` }] };
       }
 
-      const newId = `el-${++elementCounter}`;
+      const newId = getNextId(state);
       const clone = {
         id: newId,
         type: el.type,

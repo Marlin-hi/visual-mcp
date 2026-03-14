@@ -67,6 +67,12 @@ function handleMessage(msg) {
         scene = { ...scene, ...msg.data.scene };
         renderAll();
       }
+      // Adapt UI for adapter type
+      if (msg.data.adapter === 'web-editor') {
+        document.getElementById('timeline').style.display = 'none';
+        document.querySelector('.timeline-controls').style.display = 'none';
+        userInput.placeholder = 'Describe what you want to change on this page...';
+      }
       break;
     case 'scene:update':
       scene = { ...scene, ...msg.data };
