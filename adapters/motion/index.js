@@ -263,6 +263,75 @@ export function registerTools(server, bus, state) {
   );
 
   server.tool(
+    'export_video',
+    'Export the animation as an MP4 video using FFmpeg. Renders frames via the /render endpoint and stitches them together.',
+    {
+      output: z.string().optional().describe('Output file path (default: /tmp/visual-mcp-export.mp4)'),
+      fps: z.number().optional().describe('Frames per second (default: 30)'),
+      quality: z.enum(['draft', 'normal', 'high']).optional().describe('Quality preset (default: normal)'),
+    },
+    async ({ output, fps: fpsInput, quality }) => {
+      const { execFile: exec } = await import('node:child_process');
+      const { mkdir: mkDir } = await import('node:fs/promises');
+      const { promisify } = await import('node:util');
+      const execFileAsync = promisify(exec);
+
+      const port = parseInt(process.env.VISUAL_MCP_PORT || '4200', 10);
+      const duration = state.scene.duration || 5000;
+      const fps = fpsInput || 30;
+      const totalFrames = Math.ceil((duration / 1000) * fps);
+      const outPath = output || '/tmp/visual-mcp-export.mp4';
+      const framesDir = '/tmp/visual-mcp-frames';
+      const w = state.scene.width || 1920;
+      const h = state.scene.height || 1080;
+
+      const screenshotTool = 'C:/Users/hmk/tools/screenshot/screenshot.mjs';
+
+      try {
+        await mkDir(framesDir, { recursive: true });
+
+        // Render frames
+        for (let i = 0; i < totalFrames; i++) {
+          const t = Math.round((i / fps) * 1000);
+          const framePath = `${framesDir}/frame-${String(i).padStart(5, '0')}.png`;
+          const url = `http://localhost:${port}/render?t=${t}`;
+
+          await execFileAsync('node', [screenshotTool, url, '--output', framePath, '--width', String(w), '--height', String(h)]);
+
+          // Report progress every 10 frames
+          if (i % 10 === 0) {
+            bus.emit('mcp:command', { command: 'export-progress', args: { frame: i, total: totalFrames } });
+          }
+        }
+
+        // Quality presets
+        const crf = quality === 'high' ? '18' : quality === 'draft' ? '28' : '23';
+
+        // Stitch with FFmpeg
+        await execFileAsync('ffmpeg', [
+          '-y', '-framerate', String(fps),
+          '-i', `${framesDir}/frame-%05d.png`,
+          '-c:v', 'libx264', '-crf', crf,
+          '-pix_fmt', 'yuv420p',
+          '-movflags', '+faststart',
+          outPath,
+        ], { timeout: 120000 });
+
+        return {
+          content: [{
+            type: 'text',
+            text: `Video exported: ${outPath}\nFrames: ${totalFrames}, FPS: ${fps}, Duration: ${(duration/1000).toFixed(1)}s`,
+          }],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text', text: `Export failed: ${err.message}` }],
+        };
+      }
+    }
+  );
+
+  server.tool(
     'list_elements',
     'List all elements on the canvas with their properties.',
     {},

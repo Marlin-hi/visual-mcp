@@ -86,6 +86,229 @@ function handleCommand(cmd) {
       else if (cmd.args.action === 'seek') seekTo(cmd.args.time || 0);
       else if (cmd.args.action === 'reset') { seekTo(0); stopAnimation(); }
       break;
+
+    // Web-editor commands
+    case 'load-page':
+      loadWebPage(cmd.args.url);
+      break;
+    case 'toggle-edit':
+      toggleWebEditMode(cmd.args.enabled);
+      break;
+    case 'inject-css':
+      injectIntoIframe('css', cmd.args.css);
+      break;
+    case 'inject-script':
+      injectIntoIframe('script', cmd.args.script);
+      break;
+    case 'modify-element':
+      modifyIframeElement(cmd.args);
+      break;
+    case 'navigate':
+      if (webIframe) webIframe.src = cmd.args.url;
+      break;
+    case 'read-element':
+      readIframeElement(cmd.args);
+      break;
+  }
+}
+
+// --- Web Editor Mode ---
+let webIframe = null;
+let webEditMode = false;
+let webEditHandlers = null;
+
+function loadWebPage(url) {
+  // Replace canvas with iframe
+  const wrapper = document.getElementById('canvas-wrapper');
+  wrapper.innerHTML = '';
+  canvas.style.display = 'none';
+
+  webIframe = document.createElement('iframe');
+  webIframe.src = url;
+  webIframe.style.cssText = 'width: 100%; height: 100%; border: none; background: white;';
+  webIframe.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups';
+  wrapper.appendChild(webIframe);
+
+  // Hide timeline for web editor
+  document.getElementById('timeline').style.display = 'none';
+}
+
+function toggleWebEditMode(enabled) {
+  webEditMode = enabled;
+  if (!webIframe) return;
+
+  const doc = webIframe.contentDocument;
+  if (!doc || !doc.body) return;
+
+  if (enabled) {
+    // Inject edit overlay (Ember-style)
+    const style = doc.createElement('style');
+    style.id = 'visual-mcp-edit';
+    style.textContent = `
+      .vmcp-hover { outline: 2px dashed rgba(249,115,22,0.6) !important; outline-offset: 2px !important; cursor: pointer !important; }
+      .vmcp-selected { outline: 2px solid #f97316 !important; outline-offset: 2px !important; cursor: move !important; }
+      .vmcp-editing { outline: 2px solid #4ade80 !important; outline-offset: 2px !important; cursor: text !important; }
+    `;
+    doc.head.appendChild(style);
+
+    const handlers = {
+      mouseover(e) {
+        const t = e.target;
+        if (t && !t.classList.contains('vmcp-selected')) t.classList.add('vmcp-hover');
+      },
+      mouseout(e) {
+        if (e.target) e.target.classList.remove('vmcp-hover');
+      },
+      click(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        doc.querySelectorAll('.vmcp-selected').forEach(el => el.classList.remove('vmcp-selected'));
+        e.target.classList.remove('vmcp-hover');
+        e.target.classList.add('vmcp-selected');
+
+        // Build selector and report
+        const selector = buildCssSelector(e.target);
+        const text = (e.target.textContent || '').trim().slice(0, 60);
+        const tag = e.target.tagName.toLowerCase();
+
+        sendWs({ type: 'select', data: { selector, tag, text, tagName: tag } });
+        fetch('/api/adapter/selection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ selector, tag, text }),
+        });
+      },
+      dblclick(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const el = e.target;
+        el.classList.remove('vmcp-selected', 'vmcp-hover');
+        el.classList.add('vmcp-editing');
+        el.contentEditable = 'true';
+        el.focus();
+
+        const original = el.textContent;
+        const finish = () => {
+          el.contentEditable = 'false';
+          el.classList.remove('vmcp-editing');
+          const newText = el.textContent.trim();
+          if (newText !== original) {
+            const selector = buildCssSelector(el);
+            fetch('/api/adapter/change', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ selector, property: 'textContent', oldValue: original, newValue: newText }),
+            });
+          }
+        };
+        el.addEventListener('blur', finish, { once: true });
+      },
+    };
+
+    for (const [evt, fn] of Object.entries(handlers)) {
+      doc.addEventListener(evt, fn, { capture: true });
+    }
+    webEditHandlers = { doc, handlers };
+  } else {
+    // Remove edit overlay
+    if (webEditHandlers) {
+      const { doc: d, handlers: h } = webEditHandlers;
+      for (const [evt, fn] of Object.entries(h)) {
+        d.removeEventListener(evt, fn, { capture: true });
+      }
+      const style = d.getElementById('visual-mcp-edit');
+      if (style) style.remove();
+      d.querySelectorAll('.vmcp-hover,.vmcp-selected,.vmcp-editing').forEach(el => {
+        el.classList.remove('vmcp-hover', 'vmcp-selected', 'vmcp-editing');
+      });
+      webEditHandlers = null;
+    }
+  }
+}
+
+function buildCssSelector(el) {
+  const parts = [];
+  let cur = el;
+  while (cur && cur !== cur.ownerDocument.body) {
+    let sel = cur.tagName.toLowerCase();
+    if (cur.id) { parts.unshift(sel + '#' + cur.id); break; }
+    if (cur.classList.length > 0) {
+      sel += '.' + Array.from(cur.classList).filter(c => !c.startsWith('vmcp-')).slice(0, 3).join('.');
+    }
+    const parent = cur.parentElement;
+    if (parent) {
+      const siblings = Array.from(parent.children).filter(c => c.tagName === cur.tagName);
+      if (siblings.length > 1) sel += `:nth-of-type(${siblings.indexOf(cur) + 1})`;
+    }
+    parts.unshift(sel);
+    cur = cur.parentElement;
+  }
+  return parts.join(' > ');
+}
+
+function injectIntoIframe(type, content) {
+  if (!webIframe) return;
+  const doc = webIframe.contentDocument;
+  if (!doc) return;
+
+  if (type === 'css') {
+    const style = doc.createElement('style');
+    style.textContent = content;
+    doc.head.appendChild(style);
+  } else if (type === 'script') {
+    try { doc.defaultView.eval(content); } catch (e) {
+      sendWs({ type: 'input', data: { message: `[script-error] ${e.message}` } });
+    }
+  }
+}
+
+function modifyIframeElement(args) {
+  if (!webIframe) return;
+  const doc = webIframe.contentDocument;
+  if (!doc) return;
+
+  try {
+    const el = doc.querySelector(args.selector);
+    if (!el) return;
+    if (args.text !== undefined) el.textContent = args.text;
+    if (args.style) {
+      for (const [k, v] of Object.entries(args.style)) {
+        el.style[k] = v;
+      }
+    }
+  } catch {}
+}
+
+function readIframeElement(args) {
+  if (!webIframe) return;
+  const doc = webIframe.contentDocument;
+  if (!doc) return;
+
+  try {
+    const el = doc.querySelector(args.selector);
+    if (!el) {
+      sendWs({ type: 'input', data: { message: `[read-element] Not found: ${args.selector}` } });
+      return;
+    }
+
+    const computed = doc.defaultView.getComputedStyle(el);
+    const defaultProps = ['color', 'fontSize', 'fontFamily', 'backgroundColor', 'margin', 'padding', 'display', 'position'];
+    const propsToRead = args.properties || defaultProps;
+
+    const result = {
+      selector: args.selector,
+      tag: el.tagName.toLowerCase(),
+      text: (el.textContent || '').trim().slice(0, 200),
+      styles: {},
+    };
+
+    for (const prop of propsToRead) {
+      result.styles[prop] = computed.getPropertyValue(prop) || computed[prop] || '';
+    }
+
+    sendWs({ type: 'input', data: { message: `[read-element] ${JSON.stringify(result)}` } });
+  } catch (e) {
+    sendWs({ type: 'input', data: { message: `[read-element-error] ${e.message}` } });
   }
 }
 
