@@ -148,12 +148,29 @@ function handleWsMessage(msg) {
       state.userSelection = msg.data;
       bus.emit('user:select', msg.data);
       break;
-    case 'move':
+    case 'move': {
+      // Update scene state so MCP tools see the new position
+      const el = state.scene.elements?.find(e => e.id === msg.data.id);
+      if (el) {
+        if (msg.data.x !== undefined) el.props.x = msg.data.x;
+        if (msg.data.y !== undefined) el.props.y = msg.data.y;
+        // Support updating any prop via move
+        for (const [k, v] of Object.entries(msg.data)) {
+          if (k !== 'id') el.props[k] = v;
+        }
+      }
       bus.emit('user:move', msg.data);
       break;
-    case 'edit-text':
+    }
+    case 'edit-text': {
+      // Update text in scene state
+      const el = state.scene.elements?.find(e => e.id === msg.data.id);
+      if (el && msg.data.newText) {
+        el.props.text = msg.data.newText;
+      }
       bus.emit('user:edit-text', msg.data);
       break;
+    }
     case 'input':
       state.userInputs.push({ message: msg.data.message, timestamp: Date.now() });
       bus.emit('user:input', msg.data);
