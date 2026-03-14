@@ -680,14 +680,70 @@ btnEditMode.addEventListener('click', () => {
 
 btnZoomFit.addEventListener('click', fitCanvas);
 
-// --- Canvas Fitting ---
+// --- Canvas Zoom/Pan ---
+let canvasPanX = 0, canvasPanY = 0;
+let isPanning = false;
+let panStartX = 0, panStartY = 0;
+let panStartPanX = 0, panStartPanY = 0;
+
 function fitCanvas() {
   const wrapperRect = canvasWrapper.getBoundingClientRect();
   const scaleX = (wrapperRect.width - 40) / scene.width;
   const scaleY = (wrapperRect.height - 40) / scene.height;
   canvasScale = Math.min(scaleX, scaleY, 1);
-  canvas.style.transform = `scale(${canvasScale})`;
+  canvasPanX = 0;
+  canvasPanY = 0;
+  updateCanvasTransform();
 }
+
+function updateCanvasTransform() {
+  canvas.style.transform = `translate(${canvasPanX}px, ${canvasPanY}px) scale(${canvasScale})`;
+}
+
+// Zoom with scroll wheel
+canvasWrapper.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? 0.9 : 1.1;
+  const newScale = Math.max(0.1, Math.min(3, canvasScale * delta));
+
+  // Zoom towards mouse position
+  const rect = canvasWrapper.getBoundingClientRect();
+  const mx = e.clientX - rect.left - rect.width / 2;
+  const my = e.clientY - rect.top - rect.height / 2;
+
+  canvasPanX = mx - (mx - canvasPanX) * (newScale / canvasScale);
+  canvasPanY = my - (my - canvasPanY) * (newScale / canvasScale);
+  canvasScale = newScale;
+
+  updateCanvasTransform();
+}, { passive: false });
+
+// Pan with middle mouse or Alt+drag
+canvasWrapper.addEventListener('mousedown', (e) => {
+  if (e.button === 1 || (e.altKey && e.button === 0)) {
+    e.preventDefault();
+    isPanning = true;
+    panStartX = e.clientX;
+    panStartY = e.clientY;
+    panStartPanX = canvasPanX;
+    panStartPanY = canvasPanY;
+    canvasWrapper.style.cursor = 'grabbing';
+  }
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!isPanning) return;
+  canvasPanX = panStartPanX + (e.clientX - panStartX);
+  canvasPanY = panStartPanY + (e.clientY - panStartY);
+  updateCanvasTransform();
+});
+
+document.addEventListener('mouseup', () => {
+  if (isPanning) {
+    isPanning = false;
+    canvasWrapper.style.cursor = '';
+  }
+});
 
 // --- User Input ---
 function sendUserInput() {
