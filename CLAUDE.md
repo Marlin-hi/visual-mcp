@@ -25,7 +25,7 @@ Ein Prozess, der gleichzeitig:
 ## Dateien
 
 ```
-server.js              — Express + MCP Hauptserver
+server.js              — Express + MCP Hauptserver + /render Endpoint
 bin/visual-mcp.js      — CLI Entry Point
 lib/
   mcp.js              — MCP stdio Server, Core-Tools
@@ -42,12 +42,15 @@ public/
 
 | Tool | Beschreibung |
 |---|---|
-| `get_viewport` | Aktueller Zustand des Editors |
+| `get_viewport` | Aktueller Zustand des Editors (JSON) |
 | `get_user_selection` | Was der User im Browser ausgewählt hat |
 | `get_user_input` | Nachrichten die der User im Browser getippt hat |
 | `update_scene` | Scene-State aktualisieren (pushed an Browser) |
 | `send_command` | Befehl an den Browser senden |
 | `open_url` | Editor-URL anzeigen |
+| `take_screenshot` | Screenshot des Canvas als PNG (via Puppeteer) |
+| `save_scene` | Scene als JSON speichern |
+| `load_scene` | Scene aus JSON laden |
 
 ## Motion Adapter Tools
 
@@ -56,6 +59,8 @@ public/
 | `add_element` | Element hinzufügen (text, shape, image, svg) |
 | `update_element` | Element-Properties ändern |
 | `remove_element` | Element entfernen |
+| `duplicate_element` | Element klonen mit Offset |
+| `reorder_element` | Z-Index ändern (up/down/top/bottom) |
 | `add_keyframe` | Keyframe-Animation hinzufügen |
 | `set_timeline` | Play, Pause, Seek, Reset |
 | `set_scene` | Scene-Einstellungen (Background, Dimensions, Duration) |
@@ -71,19 +76,9 @@ node server.js
 VISUAL_MCP_ADAPTER=motion VISUAL_MCP_PORT=4200 node server.js
 ```
 
-## Neuen Adapter erstellen
-
-1. Ordner in `adapters/<name>/` anlegen
-2. `index.js` mit diesen Exports:
-   - `name` — String
-   - `description` — String
-   - `initialScene()` — gibt initialen State zurück
-   - `registerTools(server, bus, state)` — MCP-Tools registrieren
-   - `handleHttp(action, body, state)` — HTTP-API für adapter-spezifische Endpunkte
-
 ## MCP-Konfiguration (Claude Code)
 
-In `~/.claude/settings.local.json` oder Projekt-`.claude/settings.json`:
+In `~/.claude/mcp.json`:
 
 ```json
 {
@@ -106,7 +101,33 @@ In `~/.claude/settings.local.json` oder Projekt-`.claude/settings.json`:
 - **Drag** auf ausgewähltem Element → Verschieben
 - **Doppelklick** auf Text → Inline-Editing
 - **Input-Bar** unten → Nachricht an Claude senden
-- **Timeline** unten → Keyframes sehen, Animation steuern
+- **Timeline** → Keyframes sehen, Klick auf Ruler = Seek
 - **Properties-Panel** rechts → Werte direkt ändern
+- **Scroll-Rad** → Canvas zoomen
+- **Alt+Drag / Mitte-Klick** → Canvas pannen
+
+### Keyboard Shortcuts
+
+| Taste | Aktion |
+|---|---|
+| `Space` | Play/Pause |
+| `Delete` / `Backspace` | Ausgewähltes Element löschen |
+| `Arrow Keys` | Element um 1px verschieben (Shift = 10px) |
+| `Escape` | Auswahl aufheben |
+| `F` | Canvas einpassen (Fit) |
+
+## Render-Endpoint
+
+`GET /render?t=<ms>` — Sauberer Canvas ohne UI-Chrome. Für Screenshots und Export.
+
+## Neuen Adapter erstellen
+
+1. Ordner in `adapters/<name>/` anlegen
+2. `index.js` mit diesen Exports:
+   - `name` — String
+   - `description` — String
+   - `initialScene()` — gibt initialen State zurück
+   - `registerTools(server, bus, state)` — MCP-Tools registrieren
+   - `handleHttp(action, body, state)` — HTTP-API für adapter-spezifische Endpunkte
 
 Alle Interaktionen werden via WebSocket an den Server gemeldet und sind über MCP-Tools abrufbar.
